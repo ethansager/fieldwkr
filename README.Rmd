@@ -1,0 +1,30 @@
+---
+output: github_document
+---
+
+# fieldwkr
+
+R port of selected iefieldkit workflows for primary data collection.
+
+## Installation
+
+```r
+# devtools::install_github("<your-org>/fieldwkr")
+```
+
+## Usage
+
+```r
+library(fieldwkr)
+
+# Example: export and apply a codebook
+cb_path <- tempfile(fileext = ".xlsx")
+iecodebook_export(mtcars, cb_path)
+updated <- iecodebook_apply(mtcars, cb_path)
+```
+
+## Notes
+
+- Requires the `openxlsx` package; `haven` is optional for labelled data.
+- This package mirrors the Stata workflows at a practical level but does not
+  implement every validation rule in the original commands.
