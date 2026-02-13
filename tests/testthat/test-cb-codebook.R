@@ -1,11 +1,11 @@
 skip_if_not_installed("openxlsx")
 
-test_that("iecodebook export and apply work", {
+test_that("cb_export and cb_apply work", {
   df <- data.frame(a = 1:3, b = c("x", "y", "z"), stringsAsFactors = FALSE)
   attr(df$a, "label") <- "Old label"
 
   path <- tempfile(fileext = ".xlsx")
-  iecodebook_export(df, path)
+  fieldwkr::cb_export(df, path)
   expect_true(file.exists(path))
 
   survey <- openxlsx::read.xlsx(path, sheet = "survey")
@@ -19,7 +19,7 @@ test_that("iecodebook export and apply work", {
   openxlsx::writeData(wb, "choices", openxlsx::read.xlsx(path, sheet = "choices"))
   openxlsx::saveWorkbook(wb, path, overwrite = TRUE)
 
-  updated <- iecodebook_apply(df, path)
+  updated <- fieldwkr::cb_apply(df, path)
   expect_true("a_new" %in% names(updated))
   expect_equal(attr(updated$a_new, "label"), "New label")
 })
