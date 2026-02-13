@@ -6,8 +6,8 @@
 #' @return A list with version and version_date.
 #' @export
 fieldwkr <- function() {
-  version <- "0.1"
-  version_date <- "06JAN2026"
+  version <- as.character(utils::packageVersion("fieldwkr"))
+  version_date <- "13FEB2026"
 
   message("")
   message(sprintf(

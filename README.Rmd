@@ -26,6 +26,17 @@ updated <- cb_apply(mtcars, cb_path)
 form_check <- test_form("my_form.xlsx", verbose = FALSE)
 form_check$errors
 form_check$warnings
+
+# Unit-test a dataset against field rules
+data_check <- test_data(
+  mtcars,
+  required_cols = c("mpg", "cyl"),
+  non_missing_cols = c("mpg", "cyl"),
+  value_ranges = list(mpg = c(0, 80)),
+  min_rows = 1,
+  verbose = FALSE
+)
+data_check$errors
 ```
 
 ## Notes
@@ -34,4 +45,4 @@ form_check$warnings
 - This package mirrors the Stata workflows at a practical level but does not
   implement every validation rule in the original commands.
 - Public API uses canonical `fieldwkr` function names (`cb_*`, `correct_*`,
-  `comp_dup`, `duplicates`, `test_form`, `dummy_dat`).
+  `comp_dup`, `duplicates`, `test_form`, `test_data`, `dummy_dat`).
