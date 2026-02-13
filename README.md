@@ -1,7 +1,3 @@
----
-output: github_document
----
-
 # fieldwkr
 
 R port of selected field survey workflows for primary data collection.
@@ -9,7 +5,7 @@ R port of selected field survey workflows for primary data collection.
 ## Installation
 
 ```r
-# devtools::install_github("<your-org>/fieldwkr")
+# devtools::install_github("ethansager/fieldwkr")
 ```
 
 ## Usage
