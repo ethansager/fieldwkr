@@ -3,37 +3,57 @@
 #' @param data Data frame to document.
 #' @param path Output path for the Excel codebook.
 #' @param survey Survey name to tag in the codebook.
+#' @details
+#' Exports two sheets:
+#' - `survey`: variable metadata (`name`, `label`, `type`, `choices`) plus
+#'   survey-specific columns `name_<survey>` and `recode_<survey>`.
+#' - `choices`: generated choice lists for factors and labelled vectors.
+#'
+#' This structure is designed for survey operations where one master codebook
+#' maps variable names across rounds/instruments.
 #' @return Invisibly returns the output path.
 #' @export
-iecodebook_export <- function(data, path, survey = "current") {
+cb_export <- function(data, path, survey = "current") {
   stopifnot(is.data.frame(data))
 
   vars <- names(data)
-  labels <- vapply(vars, function(v) {
-    label <- attr(data[[v]], "label")
-    if (is.null(label)) "" else as.character(label)
-  }, character(1))
+  labels <- vapply(
+    vars,
+    function(v) {
+      label <- attr(data[[v]], "label")
+      if (is.null(label)) "" else as.character(label)
+    },
+    character(1)
+  )
 
-  types <- vapply(vars, function(v) {
-    x <- data[[v]]
-    if (inherits(x, "labelled")) {
-      if (is.numeric(x)) "numeric" else "string"
-    } else if (is.factor(x)) {
-      "string"
-    } else if (is.character(x)) {
-      "string"
-    } else if (is.integer(x)) {
-      "integer"
-    } else if (is.numeric(x)) {
-      "numeric"
-    } else {
-      class(x)[1]
-    }
-  }, character(1))
+  types <- vapply(
+    vars,
+    function(v) {
+      x <- data[[v]]
+      if (inherits(x, "labelled")) {
+        if (is.numeric(x)) "numeric" else "string"
+      } else if (is.factor(x)) {
+        "string"
+      } else if (is.character(x)) {
+        "string"
+      } else if (is.integer(x)) {
+        "integer"
+      } else if (is.numeric(x)) {
+        "numeric"
+      } else {
+        class(x)[1]
+      }
+    },
+    character(1)
+  )
 
   choices <- character(length(vars))
-  choices_sheet <- data.frame(list_name = character(), value = character(), label = character(),
-                              stringsAsFactors = FALSE)
+  choices_sheet <- data.frame(
+    list_name = character(),
+    value = character(),
+    label = character(),
+    stringsAsFactors = FALSE
+  )
 
   for (i in seq_along(vars)) {
     v <- vars[i]
@@ -95,10 +115,23 @@ iecodebook_export <- function(data, path, survey = "current") {
 #' @param survey Survey name to apply.
 #' @param drop Drop variables not listed in the codebook.
 #' @param missing_values Named vector of missing-value labels to add.
+#' @details
+#' `cb_apply()` performs, in order:
+#' 1) variable-level recodes (`recode_<survey>`),
+#' 2) label updates,
+#' 3) value label / factor reconstruction from `choices`,
+#' 4) optional drops and renames from `name_<survey>` -> `name`.
+#'
+#' For numeric choice values, `haven::labelled` is used when available.
 #' @return Updated data frame.
 #' @export
-iecodebook_apply <- function(data, path, survey = "current", drop = FALSE,
-                             missing_values = NULL) {
+cb_apply <- function(
+  data,
+  path,
+  survey = "current",
+  drop = FALSE,
+  missing_values = NULL
+) {
   stopifnot(is.data.frame(data))
 
   survey_sheet <- read_xlsx_sheet(path, "survey")
@@ -108,17 +141,30 @@ iecodebook_apply <- function(data, path, survey = "current", drop = FALSE,
   recode_col <- paste0("recode_", survey)
 
   if (!name_col %in% names(survey_sheet)) {
-    stop(sprintf("Survey column '%s' not found in codebook.", name_col), call. = FALSE)
+    stop(
+      sprintf("Survey column '%s' not found in codebook.", name_col),
+      call. = FALSE
+    )
   }
 
-  survey_sheet <- as.data.frame(lapply(survey_sheet, sanitize_text), stringsAsFactors = FALSE)
-  choices_sheet <- as.data.frame(lapply(choices_sheet, sanitize_text), stringsAsFactors = FALSE)
+  survey_sheet <- as.data.frame(
+    lapply(survey_sheet, sanitize_text),
+    stringsAsFactors = FALSE
+  )
+  choices_sheet <- as.data.frame(
+    lapply(choices_sheet, sanitize_text),
+    stringsAsFactors = FALSE
+  )
 
   old_names <- survey_sheet[[name_col]]
   new_names <- survey_sheet$name
   labels <- survey_sheet$label
   choices <- survey_sheet$choices
-  recodes <- if (recode_col %in% names(survey_sheet)) survey_sheet[[recode_col]] else rep("", nrow(survey_sheet))
+  recodes <- if (recode_col %in% names(survey_sheet)) {
+    survey_sheet[[recode_col]]
+  } else {
+    rep("", nrow(survey_sheet))
+  }
 
   to_drop <- character()
   rename_from <- character()
@@ -128,7 +174,9 @@ iecodebook_apply <- function(data, path, survey = "current", drop = FALSE,
     old <- old_names[i]
     new <- new_names[i]
 
-    if (is_blank(old)) next
+    if (is_blank(old)) {
+      next
+    }
 
     if (!old %in% names(data)) {
       stop(sprintf("Variable '%s' not found in data.", old), call. = FALSE)
@@ -154,9 +202,16 @@ iecodebook_apply <- function(data, path, survey = "current", drop = FALSE,
 
     if (!is_blank(choices[i])) {
       list_name <- choices[i]
-      rows <- choices_sheet[choices_sheet$list_name == list_name, , drop = FALSE]
+      rows <- choices_sheet[
+        choices_sheet$list_name == list_name,
+        ,
+        drop = FALSE
+      ]
       if (nrow(rows) == 0) {
-        stop(sprintf("Choice list '%s' not found in choices sheet.", list_name), call. = FALSE)
+        stop(
+          sprintf("Choice list '%s' not found in choices sheet.", list_name),
+          call. = FALSE
+        )
       }
 
       if (!is.null(missing_values)) {
@@ -203,11 +258,14 @@ iecodebook_apply <- function(data, path, survey = "current", drop = FALSE,
 #' @param data Data frame to template.
 #' @param path Output path for the Excel codebook.
 #' @param survey Survey name to tag in the codebook.
+#' @details
+#' Convenience wrapper around [cb_export()] for initializing a codebook from a
+#' single data frame.
 #' @return Invisibly returns the output path.
 #' @export
-iecodebook_template <- function(data, path, survey = "current") {
+cb_template <- function(data, path, survey = "current") {
   stopifnot(is.data.frame(data))
-  iecodebook_export(data, path, survey = survey)
+  cb_export(data, path, survey = survey)
 }
 
 #' Append multiple surveys to a single codebook
@@ -215,15 +273,19 @@ iecodebook_template <- function(data, path, survey = "current") {
 #' @param data_list List of data frames.
 #' @param path Output path for the Excel codebook.
 #' @param surveys Vector of survey names.
+#' @details
+#' Starts from the first data frame, then appends survey-specific name/recode
+#' columns for each additional survey. Variables absent in some surveys are
+#' kept with missing mappings in that survey's `name_<survey>` column.
 #' @return Invisibly returns the output path.
 #' @export
-iecodebook_append <- function(data_list, path, surveys) {
+cb_append <- function(data_list, path, surveys) {
   if (length(data_list) != length(surveys)) {
     stop("data_list and surveys must be the same length.", call. = FALSE)
   }
 
   first <- data_list[[1]]
-  iecodebook_export(first, path, survey = surveys[1])
+  cb_export(first, path, survey = surveys[1])
 
   survey_sheet <- read_xlsx_sheet(path, "survey")
   for (i in 2:length(data_list)) {
@@ -278,7 +340,9 @@ apply_recode <- function(x, recode_str) {
   changed <- rep(FALSE, length(x))
   else_value <- NULL
   for (token in tokens) {
-    if (!grepl("=", token, fixed = TRUE)) next
+    if (!grepl("=", token, fixed = TRUE)) {
+      next
+    }
     parts <- strsplit(token, "=", fixed = TRUE)[[1]]
     lhs <- parts[1]
     rhs <- parts[2]
@@ -292,11 +356,15 @@ apply_recode <- function(x, recode_str) {
       bounds <- strsplit(lhs, "/", fixed = TRUE)[[1]]
       lo <- suppressWarnings(as.numeric(bounds[1]))
       hi <- suppressWarnings(as.numeric(bounds[2]))
-      if (is.na(lo) || is.na(hi)) next
+      if (is.na(lo) || is.na(hi)) {
+        next
+      }
       idx <- out >= lo & out <= hi
     } else {
       val <- suppressWarnings(as.numeric(lhs))
-      if (is.na(val)) next
+      if (is.na(val)) {
+        next
+      }
       idx <- out == val
     }
 

@@ -1,10 +1,10 @@
 skip_if_not_installed("openxlsx")
 
-test_that("iecorrect applies numeric corrections", {
+test_that("correct_apply applies numeric corrections", {
   df <- data.frame(id = c(1, 2), x = c(1, 2), stringsAsFactors = FALSE)
 
   path <- tempfile(fileext = ".xlsx")
-  iecorrect_template(path, idvars = "id")
+  fieldwkr::correct_temp(path, idvars = "id")
 
   numeric_sheet <- data.frame(
     id = 1,
@@ -20,6 +20,6 @@ test_that("iecorrect applies numeric corrections", {
   openxlsx::writeData(wb, "numeric", numeric_sheet)
   openxlsx::saveWorkbook(wb, path, overwrite = TRUE)
 
-  updated <- iecorrect_apply(df, path, idvars = "id", sheets = "numeric")
+  updated <- fieldwkr::correct_apply(df, path, idvars = "id", sheets = "numeric")
   expect_equal(updated$x[updated$id == 1], 99)
 })
