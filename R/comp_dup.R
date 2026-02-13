@@ -8,12 +8,24 @@
 #' @param keepother Additional variables to keep in the returned data.
 #' @param more2ok Allow more than two duplicates by taking the first two.
 #' @param filter Optional logical vector to filter rows for comparison.
+#' @details
+#' This function is intended for adjudicating duplicate IDs during survey
+#' cleaning. It compares exactly two records (or the first two when
+#' `more2ok = TRUE`) and reports variables with matching versus differing
+#' values.
 #' @return A list with match/diff variables and counts. If keepdifference is
 #'   TRUE, includes a data element with the subset.
 #' @export
-iecompdup <- function(data, idvar, id, didifference = FALSE,
-                      keepdifference = FALSE, keepother = NULL,
-                      more2ok = FALSE, filter = NULL) {
+comp_dup <- function(
+  data,
+  idvar,
+  id,
+  didifference = FALSE,
+  keepdifference = FALSE,
+  keepother = NULL,
+  more2ok = FALSE,
+  filter = NULL
+) {
   stopifnot(is.data.frame(data))
   if (!idvar %in% names(data)) {
     stop(sprintf("ID variable '%s' not found in data.", idvar), call. = FALSE)
@@ -44,7 +56,10 @@ iecompdup <- function(data, idvar, id, didifference = FALSE,
 
   if (nrow(subset_data) > 2) {
     if (!more2ok && is.null(filter)) {
-      stop("More than two duplicates found; use more2ok or filter to select two.", call. = FALSE)
+      stop(
+        "More than two duplicates found; use more2ok or filter to select two.",
+        call. = FALSE
+      )
     }
     subset_data <- subset_data[seq_len(2), , drop = FALSE]
   }
@@ -74,15 +89,26 @@ iecompdup <- function(data, idvar, id, didifference = FALSE,
   match_vars <- setdiff(match_vars, idvar)
 
   if (didifference) {
-    message("The following variables have different values across the duplicates:")
+    message(
+      "The following variables have different values across the duplicates:"
+    )
     message(paste(diff_vars, collapse = " "))
   }
 
   num_non_missing <- length(match_vars) + length(diff_vars)
-  message(sprintf("The duplicate observations with ID = %s have non-missing values in %s variables.",
-                  id, num_non_missing))
-  message(sprintf("%s variable(s) are identical across the duplicates", length(match_vars)))
-  message(sprintf("%s variable(s) have different values across the duplicates", length(diff_vars)))
+  message(sprintf(
+    "The duplicate observations with ID = %s have non-missing values in %s variables.",
+    id,
+    num_non_missing
+  ))
+  message(sprintf(
+    "%s variable(s) are identical across the duplicates",
+    length(match_vars)
+  ))
+  message(sprintf(
+    "%s variable(s) have different values across the duplicates",
+    length(diff_vars)
+  ))
 
   result <- list(
     matchvars = match_vars,

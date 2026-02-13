@@ -5,10 +5,29 @@
 #' @param seed Optional random seed.
 #' @param max_tries Maximum attempts to satisfy constraints.
 #' @param max_repeat Maximum repeat loops when repeat_count is missing.
+#' @details
+#' Simulates records by traversing the `survey` and `choices` sheets and
+#' evaluating a subset of XLSForm expressions used by SurveyCTO:
+#' `${var}` references, logical operators (`and`, `or`, `not`),
+#' `selected()`, `count-selected()`, `regex()`, `contains()`, and simple type
+#' casts (`int()`, `decimal()`).
+#'
+#' Repeats are flattened using suffixes like `name__r1` or `name__r1_r2`.
+#'
+#' This is intended for testing pipelines, not for generating realistic survey
+#' distributions.
 #' @return A data frame of mock responses.
 #' @export
-iemockdata_xlsform <- function(path, n = 1, seed = NULL, max_tries = 50, max_repeat = 3) {
-  if (!is.null(seed)) set.seed(seed)
+dummy_dat <- function(
+  path,
+  n = 1,
+  seed = NULL,
+  max_tries = 50,
+  max_repeat = 3
+) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
 
   survey <- read_xlsx_sheet(path, "survey")
   choices <- read_xlsx_sheet(path, "choices")
@@ -38,11 +57,28 @@ simulate_xlsform_once <- function(survey, choices, max_tries, max_repeat) {
 
   answers <- list()
   end_row <- nrow(survey)
-  process_rows(survey, choices, 1, end_row, answers, integer(0), max_tries, max_repeat)$answers
+  process_rows(
+    survey,
+    choices,
+    1,
+    end_row,
+    answers,
+    integer(0),
+    max_tries,
+    max_repeat
+  )$answers
 }
 
-process_rows <- function(survey, choices, start_row, end_row, answers, repeat_stack,
-                         max_tries, max_repeat) {
+process_rows <- function(
+  survey,
+  choices,
+  start_row,
+  end_row,
+  answers,
+  repeat_stack,
+  max_tries,
+  max_repeat
+) {
   i <- start_row
   while (i <= end_row) {
     type <- survey$type[i]
@@ -50,7 +86,11 @@ process_rows <- function(survey, choices, start_row, end_row, answers, repeat_st
     type_parts <- strsplit(type, " ")[[1]]
     base_type <- type_parts[1]
 
-    if (base_type == "begin" && length(type_parts) >= 2 && type_parts[2] == "repeat") {
+    if (
+      base_type == "begin" &&
+        length(type_parts) >= 2 &&
+        type_parts[2] == "repeat"
+    ) {
       end_repeat <- find_end_repeat(survey, i, end_row)
       if (end_repeat < i) {
         i <- i + 1
@@ -79,7 +119,9 @@ process_rows <- function(survey, choices, start_row, end_row, answers, repeat_st
       next
     }
 
-    if (base_type == "end" && length(type_parts) >= 2 && type_parts[2] == "repeat") {
+    if (
+      base_type == "end" && length(type_parts) >= 2 && type_parts[2] == "repeat"
+    ) {
       i <- i + 1
       next
     }
@@ -121,7 +163,9 @@ process_rows <- function(survey, choices, start_row, end_row, answers, repeat_st
         tmp <- answers
         tmp[[full_name]] <- value
         ok <- isTRUE(eval_xlsform_expr(constraint, tmp, repeat_stack))
-        if (ok) break
+        if (ok) {
+          break
+        }
         value <- sample_value(survey, choices, i, repeat_stack)
         tries <- tries + 1
       }
@@ -139,7 +183,9 @@ find_end_repeat <- function(survey, start_row, end_row) {
   depth <- 0
   for (i in seq(start_row, end_row)) {
     type <- as.character(survey$type[i])
-    if (type == "begin repeat") depth <- depth + 1
+    if (type == "begin repeat") {
+      depth <- depth + 1
+    }
     if (type == "end repeat") {
       depth <- depth - 1
       if (depth == 0) return(i)
@@ -162,7 +208,9 @@ get_repeat_loops <- function(survey, row, answers, repeat_stack, max_repeat) {
 
 should_skip_row <- function(survey, row, answers, repeat_stack) {
   rel <- get_col_value(survey, "relevance", row)
-  if (is.na(rel) || !nzchar(rel)) return(FALSE)
+  if (is.na(rel) || !nzchar(rel)) {
+    return(FALSE)
+  }
   isTRUE(eval_xlsform_expr(rel, answers, repeat_stack)) == FALSE
 }
 
@@ -180,7 +228,9 @@ sample_value <- function(survey, choices, row, repeat_stack) {
   if (base_type == "select_multiple" && length(type_parts) >= 2) {
     list_name <- type_parts[2]
     opts <- get_choice_values(choices, list_name)
-    if (length(opts) == 0) return(NA)
+    if (length(opts) == 0) {
+      return(NA)
+    }
     n_select <- sample(seq_len(length(opts)), 1)
     return(paste(sample(opts, n_select), collapse = " "))
   }
@@ -215,9 +265,19 @@ sample_value <- function(survey, choices, row, repeat_stack) {
 }
 
 get_choice_values <- function(choices, list_name) {
-  if (!"list_name" %in% names(choices)) return(character())
-  value_col <- if ("name" %in% names(choices)) "name" else if ("value" %in% names(choices)) "value" else NULL
-  if (is.null(value_col)) return(character())
+  if (!"list_name" %in% names(choices)) {
+    return(character())
+  }
+  value_col <- if ("name" %in% names(choices)) {
+    "name"
+  } else if ("value" %in% names(choices)) {
+    "value"
+  } else {
+    NULL
+  }
+  if (is.null(value_col)) {
+    return(character())
+  }
   rows <- choices$list_name == list_name
   vals <- choices[[value_col]][rows]
   vals <- vals[!is.na(vals)]
@@ -225,25 +285,35 @@ get_choice_values <- function(choices, list_name) {
 }
 
 get_col_value <- function(survey, col, row) {
-  if (!col %in% names(survey)) return(NA_character_)
+  if (!col %in% names(survey)) {
+    return(NA_character_)
+  }
   survey[[col]][row]
 }
 
 make_repeat_name <- function(name, repeat_stack) {
-  if (length(repeat_stack) == 0) return(name)
+  if (length(repeat_stack) == 0) {
+    return(name)
+  }
   suffix <- paste0("r", repeat_stack, collapse = "_")
   paste0(name, "__", suffix)
 }
 
 eval_xlsform_expr <- function(expr, answers, repeat_stack) {
   expr <- trimws(expr)
-  if (!nzchar(expr)) return(TRUE)
+  if (!nzchar(expr)) {
+    return(TRUE)
+  }
 
   translated <- translate_xlsform_expr(expr)
   get_answer <- function(name) {
-    if (name %in% names(answers)) return(answers[[name]])
+    if (name %in% names(answers)) {
+      return(answers[[name]])
+    }
     alt <- make_repeat_name(name, repeat_stack)
-    if (alt %in% names(answers)) return(answers[[alt]])
+    if (alt %in% names(answers)) {
+      return(answers[[alt]])
+    }
     NA
   }
 
@@ -257,7 +327,11 @@ eval_xlsform_expr <- function(expr, answers, repeat_stack) {
   tryCatch(
     eval(parse(text = translated), env),
     error = function(e) {
-      warning(sprintf("Failed to evaluate expression '%s': %s", expr, e$message))
+      warning(sprintf(
+        "Failed to evaluate expression '%s': %s",
+        expr,
+        e$message
+      ))
       NA
     }
   )
@@ -271,7 +345,12 @@ translate_xlsform_expr <- function(expr) {
   out <- gsub("(?i)\\bnot\\b", "!", out, perl = TRUE)
   out <- gsub("(?<![<>=!])=(?!=)", "==", out, perl = TRUE)
   out <- gsub("(?i)\\bselected\\s*\\(", "xls_selected(", out, perl = TRUE)
-  out <- gsub("(?i)\\bcount-selected\\s*\\(", "xls_count_selected(", out, perl = TRUE)
+  out <- gsub(
+    "(?i)\\bcount-selected\\s*\\(",
+    "xls_count_selected(",
+    out,
+    perl = TRUE
+  )
   out <- gsub("(?i)\\bregex\\s*\\(", "xls_regex(", out, perl = TRUE)
   out <- gsub("(?i)\\bcontains\\s*\\(", "xls_contains(", out, perl = TRUE)
   out <- gsub("(?i)\\btoday\\s*\\(\\s*\\)", "Sys.Date()", out, perl = TRUE)
@@ -282,7 +361,9 @@ translate_xlsform_expr <- function(expr) {
 }
 
 xls_selected <- function(value, choice) {
-  if (length(value) == 0 || is.na(value)) return(FALSE)
+  if (length(value) == 0 || is.na(value)) {
+    return(FALSE)
+  }
   if (length(value) > 1) {
     vals <- as.character(value)
   } else {
@@ -292,17 +373,25 @@ xls_selected <- function(value, choice) {
 }
 
 xls_count_selected <- function(value) {
-  if (length(value) == 0 || is.na(value)) return(0L)
-  if (length(value) > 1) return(length(value))
+  if (length(value) == 0 || is.na(value)) {
+    return(0L)
+  }
+  if (length(value) > 1) {
+    return(length(value))
+  }
   length(unlist(strsplit(as.character(value), " ")))
 }
 
 xls_regex <- function(value, pattern) {
-  if (length(value) == 0 || is.na(value)) return(FALSE)
+  if (length(value) == 0 || is.na(value)) {
+    return(FALSE)
+  }
   grepl(pattern, as.character(value))
 }
 
 xls_contains <- function(value, pattern) {
-  if (length(value) == 0 || is.na(value)) return(FALSE)
+  if (length(value) == 0 || is.na(value)) {
+    return(FALSE)
+  }
   grepl(pattern, as.character(value), fixed = TRUE)
 }

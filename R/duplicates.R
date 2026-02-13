@@ -6,6 +6,16 @@
 #' @param report_path Output path for the Excel duplicates report.
 #' @param keepvars Additional columns to include in the report.
 #' @param apply Apply corrections from the report if it exists.
+#' @details
+#' This workflow mirrors SurveyCTO field-cleaning practice:
+#' 1) create a duplicates workbook for manual adjudication,
+#' 2) mark rows to drop and/or assign a replacement ID,
+#' 3) re-apply the workbook to produce cleaned data.
+#'
+#' The `drop` column accepts `"drop"` or `"yes"` (case-sensitive).
+#' The `newid` column replaces matching `idvar` values.
+#'
+#' `uniquevars` must uniquely identify rows before running duplicate checks.
 #' @return Invisibly returns a list with data and report.
 #' @export
 duplicates <- function(
@@ -74,7 +84,7 @@ build_duplicates_report <- function(data, idvar, uniquevars, keepvars) {
 
     listofdiffs <- ""
     if (nrow(group) == 2) {
-      diffvars <- iecompdup(
+      diffvars <- comp_dup(
         group,
         idvar = idvar,
         id = id,
@@ -85,7 +95,7 @@ build_duplicates_report <- function(data, idvar, uniquevars, keepvars) {
         if (nchar(listofdiffs) > 250) {
           listofdiffs <- paste0(
             substr(listofdiffs, 1, 200),
-            " ||| List truncated, use iecompdup for full list"
+            " ||| List truncated, use comp_dup for full list"
           )
         }
       }

@@ -2,18 +2,36 @@
 #'
 #' @param path Output path for the Excel template.
 #' @param idvars ID columns to include in the template.
+#' @details
+#' The template contains three sheets:
+#' - `numeric`: numeric edits keyed by `idvars`, with `varname`, `value`, and
+#'   optional `valuecurrent` guards.
+#' - `string`: string edits with the same structure.
+#' - `drop`: row-level drops keyed by `idvars` (supports `*` wildcards).
+#'
+#' Use [correct_apply()] to apply completed templates back to data.
 #' @return Invisibly returns the output path.
 #' @export
-iecorrect_template <- function(path, idvars) {
+correct_temp <- function(path, idvars) {
   if (length(idvars) == 0) {
     stop("idvars must be provided.", call. = FALSE)
   }
 
-  base_cols <- c(idvars, "varname", "value", "valuecurrent", "initials", "notes")
+  base_cols <- c(
+    idvars,
+    "varname",
+    "value",
+    "valuecurrent",
+    "initials",
+    "notes"
+  )
   drop_cols <- c(idvars, "n_obs", "initials", "notes")
 
   empty_sheet <- function(cols) {
-    as.data.frame(setNames(replicate(length(cols), character(0), simplify = FALSE), cols))
+    as.data.frame(setNames(
+      replicate(length(cols), character(0), simplify = FALSE),
+      cols
+    ))
   }
 
   sheets <- list(
@@ -32,9 +50,20 @@ iecorrect_template <- function(path, idvars) {
 #' @param path Path to the Excel corrections workbook.
 #' @param idvars ID columns used to match records.
 #' @param sheets Sheets to apply.
+#' @details
+#' Row matching is conjunctive across all `idvars`. For any `idvar`, the value
+#' `"*"` acts as a wildcard.
+#'
+#' If a `valuecurrent` column is present in `numeric`/`string` sheets, edits are
+#' applied only when the current value also matches.
 #' @return Updated data frame.
 #' @export
-iecorrect_apply <- function(data, path, idvars, sheets = c("numeric", "string", "drop")) {
+correct_apply <- function(
+  data,
+  path,
+  idvars,
+  sheets = c("numeric", "string", "drop")
+) {
   stopifnot(is.data.frame(data))
 
   if (!all(idvars %in% names(data))) {
@@ -42,10 +71,22 @@ iecorrect_apply <- function(data, path, idvars, sheets = c("numeric", "string", 
   }
 
   if ("numeric" %in% sheets) {
-    data <- apply_corrections_sheet(data, path, idvars, "numeric", numeric = TRUE)
+    data <- apply_corrections_sheet(
+      data,
+      path,
+      idvars,
+      "numeric",
+      numeric = TRUE
+    )
   }
   if ("string" %in% sheets) {
-    data <- apply_corrections_sheet(data, path, idvars, "string", numeric = FALSE)
+    data <- apply_corrections_sheet(
+      data,
+      path,
+      idvars,
+      "string",
+      numeric = FALSE
+    )
   }
   if ("drop" %in% sheets) {
     drop_sheet <- read_xlsx_sheet(path, "drop")
@@ -59,9 +100,17 @@ iecorrect_apply <- function(data, path, idvars, sheets = c("numeric", "string", 
 
 #' @keywords internal
 #' @noRd
-apply_corrections_sheet <- function(data, path, idvars, sheet, numeric = FALSE) {
+apply_corrections_sheet <- function(
+  data,
+  path,
+  idvars,
+  sheet,
+  numeric = FALSE
+) {
   sheet_data <- read_xlsx_sheet(path, sheet)
-  if (nrow(sheet_data) == 0) return(data)
+  if (nrow(sheet_data) == 0) {
+    return(data)
+  }
 
   required <- c(idvars, "varname", "value")
   if (!all(required %in% names(sheet_data))) {
@@ -71,21 +120,29 @@ apply_corrections_sheet <- function(data, path, idvars, sheet, numeric = FALSE) 
   for (i in seq_len(nrow(sheet_data))) {
     row <- sheet_data[i, , drop = FALSE]
     varname <- row$varname
-    if (is_blank(varname) || !varname %in% names(data)) next
+    if (is_blank(varname) || !varname %in% names(data)) {
+      next
+    }
 
     value <- row$value
-    if (numeric) value <- suppressWarnings(as.numeric(value))
+    if (numeric) {
+      value <- suppressWarnings(as.numeric(value))
+    }
 
     idx <- rep(TRUE, nrow(data))
     for (id in idvars) {
       val <- row[[id]]
-      if (is_blank(val) || val == "*") next
+      if (is_blank(val) || val == "*") {
+        next
+      }
       idx <- idx & as.character(data[[id]]) == as.character(val)
     }
 
     if ("valuecurrent" %in% names(row) && !is_blank(row$valuecurrent)) {
       cur <- row$valuecurrent
-      if (numeric) cur <- suppressWarnings(as.numeric(cur))
+      if (numeric) {
+        cur <- suppressWarnings(as.numeric(cur))
+      }
       idx <- idx & data[[varname]] == cur
     }
 
@@ -103,7 +160,9 @@ drop_rows_by_sheet <- function(data, sheet_data, idvars) {
     idx <- rep(TRUE, nrow(data))
     for (id in idvars) {
       val <- row[[id]]
-      if (is_blank(val) || val == "*") next
+      if (is_blank(val) || val == "*") {
+        next
+      }
       idx <- idx & as.character(data[[id]]) == as.character(val)
     }
     data <- data[!idx, , drop = FALSE]

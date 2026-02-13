@@ -1,6 +1,6 @@
 skip_if_not_installed("openxlsx")
 
-test_that("ieduplicates creates a report", {
+test_that("duplicates creates a report", {
   df <- data.frame(
     id = c(1, 1, 2),
     uid = c("a", "b", "c"),
@@ -9,7 +9,7 @@ test_that("ieduplicates creates a report", {
   )
 
   report_path <- tempfile(fileext = ".xlsx")
-  res <- ieduplicates(df, idvar = "id", uniquevars = "uid", report_path = report_path, apply = FALSE)
+  res <- fieldwkr::duplicates(df, idvar = "id", uniquevars = "uid", report_path = report_path, apply = FALSE)
 
   expect_true(file.exists(report_path))
   expect_true(is.data.frame(res$report))
