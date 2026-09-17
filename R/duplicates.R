@@ -1,21 +1,35 @@
 #' Generate and apply a duplicates report
 #'
 #' @param data Data frame to inspect.
-#' @param idvar Column name for the ID variable.
-#' @param uniquevars Columns that uniquely identify observations.
+#' @param idvar Column name for the ID variable. This is the project-level
+#'   identifier that can legitimately appear more than once (a household ID
+#'   carried in from the sample frame, for example) and is the thing being
+#'   adjudicated.
+#' @param uniquevars Columns that uniquely identify a single submission. In
+#'   SurveyCTO data this is normally `KEY`, the submission uuid the server
+#'   stamps on every record. It is deliberately not the same as `idvar`: rows
+#'   to drop and replacement IDs are matched on `uniquevars`, so marking one
+#'   submission affects only that submission and leaves its duplicate in place.
 #' @param report_path Output path for the Excel duplicates report.
 #' @param keepvars Additional columns to include in the report.
 #' @param apply Apply corrections from the report if it exists.
+#' @param overwrite Regenerate `report_path` even if it already exists.
 #' @details
 #' This workflow mirrors SurveyCTO field-cleaning practice:
 #' 1) create a duplicates workbook for manual adjudication,
 #' 2) mark rows to drop and/or assign a replacement ID,
 #' 3) re-apply the workbook to produce cleaned data.
 #'
+#' Steps 1 and 3 are the same call, so an existing `report_path` is never
+#' overwritten by default: that would discard the adjudication made in step 2.
+#' Set `overwrite = TRUE` to rebuild a stale report after the input data has
+#' changed.
+#'
 #' The `drop` column accepts `"drop"` or `"yes"` (case-sensitive).
 #' The `newid` column replaces matching `idvar` values.
 #'
-#' `uniquevars` must uniquely identify rows before running duplicate checks.
+#' `uniquevars` must uniquely identify rows before running duplicate checks, and
+#' must be present in the report for the workbook to be applied back.
 #' @return Invisibly returns a list with data and report.
 #' @export
 duplicates <- function(
@@ -24,7 +38,8 @@ duplicates <- function(
   uniquevars,
   report_path,
   keepvars = NULL,
-  apply = TRUE
+  apply = TRUE,
+  overwrite = FALSE
 ) {
   stopifnot(is.data.frame(data))
 
@@ -46,7 +61,14 @@ duplicates <- function(
 
   report <- build_duplicates_report(data, idvar, uniquevars, keepvars)
   if (nrow(report) > 0) {
-    write_xlsx_sheets(report_path, list(duplicates = report))
+    if (overwrite || !file.exists(report_path)) {
+      write_xlsx_sheets(report_path, list(duplicates = report))
+    } else {
+      message(sprintf(
+        "Report '%s' already exists; applying it as-is. Use overwrite = TRUE to rebuild it.",
+        report_path
+      ))
+    }
   }
 
   if (!apply) {
@@ -57,7 +79,7 @@ duplicates <- function(
     return(invisible(list(data = data, report = report)))
   }
 
-  updated <- apply_duplicates_report(data, idvar, report_path)
+  updated <- apply_duplicates_report(data, idvar, uniquevars, report_path)
   invisible(list(data = updated, report = report))
 }
 
@@ -139,27 +161,49 @@ build_duplicates_report <- function(data, idvar, uniquevars, keepvars) {
 
 #' @keywords internal
 #' @noRd
-apply_duplicates_report <- function(data, idvar, report_path) {
+apply_duplicates_report <- function(data, idvar, uniquevars, report_path) {
   report <- read_xlsx_sheet(report_path, "duplicates")
   if (!idvar %in% names(report)) {
     stop("Report is missing ID variable column.", call. = FALSE)
   }
+  if (!all(uniquevars %in% names(report))) {
+    stop("Report is missing uniquevars column(s).", call. = FALSE)
+  }
+
+  row_key <- function(df) {
+    do.call(
+      paste,
+      c(lapply(uniquevars, function(v) as.character(df[[v]])), sep = "\r")
+    )
+  }
+  data_key <- row_key(data)
 
   if ("drop" %in% names(report)) {
     drops <- report[report$drop %in% c("drop", "yes"), , drop = FALSE]
     if (nrow(drops) > 0) {
-      ids_to_drop <- unique(drops[[idvar]])
-      data <- data[!data[[idvar]] %in% ids_to_drop, , drop = FALSE]
+      data <- data[!data_key %in% row_key(drops), , drop = FALSE]
+      data_key <- row_key(data)
     }
   }
 
   if ("newid" %in% names(report)) {
     updates <- report[!is_blank(report$newid), , drop = FALSE]
     if (nrow(updates) > 0) {
-      for (i in seq_len(nrow(updates))) {
-        old_id <- updates[[idvar]][i]
-        new_id <- updates$newid[i]
-        data[[idvar]][data[[idvar]] == old_id] <- new_id
+      idx <- match(data_key, row_key(updates))
+      has_new <- !is.na(idx)
+      if (any(has_new)) {
+        new_ids <- as.character(updates$newid[idx[has_new]])
+        if (is.numeric(data[[idvar]])) {
+          converted <- suppressWarnings(as.numeric(new_ids))
+          if (any(is.na(converted))) {
+            stop(
+              "Non-numeric newid value for a numeric ID variable.",
+              call. = FALSE
+            )
+          }
+          new_ids <- converted
+        }
+        data[[idvar]][has_new] <- new_ids
       }
     }
   }
