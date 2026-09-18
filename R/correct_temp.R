@@ -191,11 +191,11 @@ drop_rows_by_sheet <- function(data, sheet_data, idvars) {
   data
 }
 
-#' @keywords internal
-#' @noRd
 #' Rows of `data` matched by one correction row, conjunctively across `idvars`.
 #' A comparison against a missing value in the data yields FALSE, not NA: an
 #' NA index would fabricate all-NA rows when used to subset.
+#' @keywords internal
+#' @noRd
 corrections_match <- function(data, row, idvars) {
   idx <- rep(TRUE, nrow(data))
   for (id in idvars) {
