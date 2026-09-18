@@ -247,19 +247,13 @@ cb_apply <- function(
           # branch turns a value into NA.
           parsed <- suppressWarnings(as.numeric(x))
           if (all(is.na(x) | !is.na(parsed))) {
-            attr(parsed, "label") <- attr(x, "label", exact = TRUE)
             x <- parsed
           } else {
             vals <- as.character(rows$value)
           }
         }
         labels_map <- setNames(vals, labs)
-        fmt <- attr(data[[old]], "format.stata", exact = TRUE)
-        same_type <- identical(typeof(x), typeof(data[[old]]))
         data[[old]] <- make_labelled(x, labels = labels_map)
-        if (!is.null(fmt) && same_type) {
-          attr(data[[old]], "format.stata") <- fmt
-        }
       } else {
         # factor() turns any value outside `levels` into NA, so check first.
         x <- as.character(data[[old]])

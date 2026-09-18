@@ -23,16 +23,6 @@ form_check <- test_form("my_form.xlsx", verbose = FALSE)
 form_check$errors
 form_check$warnings
 
-# Build a codebook from the SurveyCTO form, then use it to label an export.
-# strict = FALSE skips form fields that this export does not contain.
-cb_from_form("my_form.xlsx", "codebook.xlsx", survey = "baseline")
-labelled <- cb_apply(export, "codebook.xlsx", survey = "baseline", strict = FALSE)
-
-# Generate mock submissions from the form to test a cleaning pipeline.
-# Fixing seed and today makes the output reproducible.
-mock <- dummy_dat("my_form.xlsx", n = 100, seed = 1, today = as.Date("2024-06-01"))
-attr(mock, "expression_issues") # expressions that could not be simulated, e.g. pulldata()
-
 # Unit-test a dataset against field rules
 data_check <- test_data(
   mtcars,
