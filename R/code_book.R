@@ -72,7 +72,7 @@ cb_export <- function(data, path, survey = "current") {
       }
     }
 
-    if (length(list_name) > 0 && nzchar(list_name)) {
+    if (nzchar(list_name)) {
       choices[i] <- list_name
       if (!is.null(choice_map)) {
         new_rows <- data.frame(
@@ -227,8 +227,21 @@ cb_apply <- function(
       vals <- suppressWarnings(as.numeric(rows$value))
       labs <- rows$label
       if (all(!is.na(vals))) {
+        x <- data[[old]]
+        if (is.character(x)) {
+          # SurveyCTO exports often read select_one answers as character while
+          # the codebook holds numeric codes. Promote the column when every
+          # value parses; otherwise label it with character codes. Neither
+          # branch turns a value into NA.
+          parsed <- suppressWarnings(as.numeric(x))
+          if (all(is.na(x) | !is.na(parsed))) {
+            x <- parsed
+          } else {
+            vals <- as.character(rows$value)
+          }
+        }
         labels_map <- setNames(vals, labs)
-        data[[old]] <- make_labelled(data[[old]], labels = labels_map)
+        data[[old]] <- make_labelled(x, labels = labels_map)
       } else {
         data[[old]] <- factor(data[[old]], levels = rows$value, labels = labs)
       }
@@ -246,6 +259,16 @@ cb_apply <- function(
   if (length(rename_from) > 0) {
     if (any(duplicated(rename_to))) {
       stop("Rename conflict detected in codebook.", call. = FALSE)
+    }
+    clash <- intersect(rename_to, setdiff(names(data), rename_from))
+    if (length(clash) > 0) {
+      stop(
+        sprintf(
+          "Rename target(s) already present in the data: %s",
+          paste(clash, collapse = ", ")
+        ),
+        call. = FALSE
+      )
     }
     names(data)[match(rename_from, names(data))] <- rename_to
   }
@@ -288,7 +311,7 @@ cb_append <- function(data_list, path, surveys) {
   cb_export(first, path, survey = surveys[1])
 
   survey_sheet <- read_xlsx_sheet(path, "survey")
-  for (i in 2:length(data_list)) {
+  for (i in seq_along(data_list)[-1]) {
     data <- data_list[[i]]
     vars <- names(data)
     name_col <- paste0("name_", surveys[i])

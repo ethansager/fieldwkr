@@ -7,7 +7,9 @@
 #' - `numeric`: numeric edits keyed by `idvars`, with `varname`, `value`, and
 #'   optional `valuecurrent` guards.
 #' - `string`: string edits with the same structure.
-#' - `drop`: row-level drops keyed by `idvars` (supports `*` wildcards).
+#' - `drop`: row-level drops keyed by `idvars`.
+#'
+#' Every `idvars` cell must be filled in on every row. There is no wildcard.
 #'
 #' Use [correct_apply()] to apply completed templates back to data.
 #' @return Invisibly returns the output path.
@@ -51,8 +53,10 @@ correct_temp <- function(path, idvars) {
 #' @param idvars ID columns used to match records.
 #' @param sheets Sheets to apply.
 #' @details
-#' Row matching is conjunctive across all `idvars`. For any `idvar`, the value
-#' `"*"` acts as a wildcard.
+#' Row matching is conjunctive across all `idvars`: every ID column must be
+#' filled in on every correction row, and all of them must match. There is no
+#' wildcard, because a cell that matches every record is far more often a
+#' data-entry slip than an intention. A blank cell is an error.
 #'
 #' If a `valuecurrent` column is present in `numeric`/`string` sheets, edits are
 #' applied only when the current value also matches.
@@ -120,23 +124,47 @@ apply_corrections_sheet <- function(
   for (i in seq_len(nrow(sheet_data))) {
     row <- sheet_data[i, , drop = FALSE]
     varname <- row$varname
-    if (is_blank(varname) || !varname %in% names(data)) {
-      next
+    if (is_blank(varname)) {
+      stop(
+        sprintf("Sheet '%s' row %s: blank varname.", sheet, i),
+        call. = FALSE
+      )
+    }
+    if (!varname %in% names(data)) {
+      stop(
+        sprintf(
+          "Sheet '%s' row %s: variable '%s' is not in the data.",
+          sheet,
+          i,
+          varname
+        ),
+        call. = FALSE
+      )
     }
 
     value <- row$value
     if (numeric) {
-      value <- suppressWarnings(as.numeric(value))
+      if (is_blank(value)) {
+        value <- NA_real_
+      } else {
+        parsed <- suppressWarnings(as.numeric(value))
+        if (is.na(parsed)) {
+          stop(
+            sprintf(
+              "Sheet '%s' row %s: value '%s' for variable '%s' is not numeric.",
+              sheet,
+              i,
+              value,
+              varname
+            ),
+            call. = FALSE
+          )
+        }
+        value <- parsed
+      }
     }
 
-    idx <- rep(TRUE, nrow(data))
-    for (id in idvars) {
-      val <- row[[id]]
-      if (is_blank(val) || val == "*") {
-        next
-      }
-      idx <- idx & as.character(data[[id]]) == as.character(val)
-    }
+    idx <- corrections_match(data, row, idvars)
 
     if ("valuecurrent" %in% names(row) && !is_blank(row$valuecurrent)) {
       cur <- row$valuecurrent
@@ -157,15 +185,32 @@ apply_corrections_sheet <- function(
 drop_rows_by_sheet <- function(data, sheet_data, idvars) {
   for (i in seq_len(nrow(sheet_data))) {
     row <- sheet_data[i, , drop = FALSE]
-    idx <- rep(TRUE, nrow(data))
-    for (id in idvars) {
-      val <- row[[id]]
-      if (is_blank(val) || val == "*") {
-        next
-      }
-      idx <- idx & as.character(data[[id]]) == as.character(val)
-    }
+    idx <- corrections_match(data, row, idvars)
     data <- data[!idx, , drop = FALSE]
   }
   data
+}
+
+#' Rows of `data` matched by one correction row, conjunctively across `idvars`.
+#' A comparison against a missing value in the data yields FALSE, not NA: an
+#' NA index would fabricate all-NA rows when used to subset.
+#' @keywords internal
+#' @noRd
+corrections_match <- function(data, row, idvars) {
+  idx <- rep(TRUE, nrow(data))
+  for (id in idvars) {
+    val <- row[[id]]
+    if (is_blank(val)) {
+      stop(
+        sprintf(
+          "Blank '%s' value in a corrections row; every ID column must be filled in.",
+          id
+        ),
+        call. = FALSE
+      )
+    }
+    cmp <- as.character(data[[id]]) == as.character(val)
+    idx <- idx & !is.na(cmp) & cmp
+  }
+  idx
 }
