@@ -7,7 +7,8 @@
 #' @param keepdifference Return a data frame of differing variables.
 #' @param keepother Additional variables to keep in the returned data.
 #' @param more2ok Allow more than two duplicates by taking the first two.
-#' @param filter Optional logical vector to filter rows for comparison.
+#' @param filter Optional logical vector over the rows of `data` (length
+#'   `nrow(data)`) restricting which records are compared.
 #' @details
 #' This function is intended for adjudicating duplicate IDs during survey
 #' cleaning. It compares exactly two records (or the first two when
@@ -45,19 +46,26 @@ comp_dup <- function(
   data$id__tmp <- as.character(id_values)
   target <- as.character(id)
 
-  subset_data <- data[data$id__tmp == target, , drop = FALSE]
+  subset_rows <- data$id__tmp == target
   if (!is.null(filter)) {
-    subset_data <- subset_data[filter, , drop = FALSE]
+    if (!is.logical(filter) || length(filter) != nrow(data)) {
+      stop(
+        "filter must be a logical vector with one element per row of data.",
+        call. = FALSE
+      )
+    }
+    subset_rows <- subset_rows & !is.na(filter) & filter
   }
+  subset_data <- data[subset_rows, , drop = FALSE]
 
   if (nrow(subset_data) == 0) {
     stop(sprintf("No rows found for %s == %s.", idvar, id), call. = FALSE)
   }
 
   if (nrow(subset_data) > 2) {
-    if (!more2ok && is.null(filter)) {
+    if (!more2ok) {
       stop(
-        "More than two duplicates found; use more2ok or filter to select two.",
+        "More than two records to compare; narrow with filter, or set more2ok.",
         call. = FALSE
       )
     }
@@ -121,9 +129,8 @@ comp_dup <- function(
   if (keepdifference && length(diff_vars) > 0) {
     keep <- c(idvar, diff_vars, keepother)
     keep <- unique(keep[keep %in% names(data)])
-    result$data <- data[data$id__tmp == target, keep, drop = FALSE]
+    result$data <- data[subset_rows, keep, drop = FALSE]
   }
 
-  data$id__tmp <- NULL
   result
 }
