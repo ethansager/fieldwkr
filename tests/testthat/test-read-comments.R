@@ -65,9 +65,9 @@ test_that("duplicate field names are numbered", {
   result <- fieldwkr::read_comments(tmp)
 
   expect_equal(nrow(result), 1)
-  expect_true("field_1" %in% names(result))
+  expect_true("field" %in% names(result))
   expect_true("field_2" %in% names(result))
-  expect_equal(result$field_1, "first")
+  expect_equal(result$field, "first")
   expect_equal(result$field_2, "second")
 })
 
