@@ -16,6 +16,10 @@
 !CONTRIBUTING.md
 !LICENSE*
 
+# Package metadata; without these the package cannot be installed
+!DESCRIPTION
+!NAMESPACE
+
 #######################
 # For performance reasons, if a folder is already ignored, then
 # GitHub does not check the content for that folder for matches

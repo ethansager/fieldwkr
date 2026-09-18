@@ -47,12 +47,35 @@ duplicates <- function(
     stop(sprintf("ID variable '%s' not found.", idvar), call. = FALSE)
   }
 
-  if (any(is.na(data[[idvar]]))) {
-    stop("Missing values in ID variable.", call. = FALSE)
+  id_blank <- is_blank(as.character(data[[idvar]]))
+  if (any(id_blank)) {
+    stop(
+      sprintf("%d row(s) have a missing or blank '%s'.", sum(id_blank), idvar),
+      call. = FALSE
+    )
   }
 
   if (!all(uniquevars %in% names(data))) {
     stop("Some uniquevars are not in the data.", call. = FALSE)
+  }
+
+  key_blank <- Reduce(
+    `|`,
+    lapply(uniquevars, function(v) is_blank(as.character(data[[v]])))
+  )
+  if (any(key_blank)) {
+    stop(
+      sprintf(
+        paste0(
+          "%d row(s) have a missing or blank value in uniquevars (%s). ",
+          "In SurveyCTO data these are usually records with no submission; ",
+          "drop them before checking duplicates."
+        ),
+        sum(key_blank),
+        paste(uniquevars, collapse = ", ")
+      ),
+      call. = FALSE
+    )
   }
 
   if (any(duplicated(data[uniquevars]))) {

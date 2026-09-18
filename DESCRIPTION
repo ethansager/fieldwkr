@@ -1,0 +1,22 @@
+Package: fieldwkr
+Title: Field Survey Workflows for Primary Data Collection
+Version: 0.1.0
+Authors@R:
+    person("Ethan", "Sager", email = "es1772@georgetown.edu",
+           role = c("aut", "cre"))
+Description: Workflow helpers for primary survey data collection: codebook
+    export and application, duplicate adjudication, correction workbooks,
+    SurveyCTO comment files, dataset validation, XLSForm checking, and mock
+    data generation from an XLSForm.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports:
+    openxlsx,
+    stats,
+    utils
+Suggests:
+    haven,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0

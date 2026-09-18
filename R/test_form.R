@@ -38,16 +38,8 @@ test_form <- function(path, verbose = TRUE) {
     }
   )
 
-  get_sheet_name <- function(target) {
-    idx <- which(tolower(sheets) == tolower(target))
-    if (length(idx) == 0) {
-      return(NULL)
-    }
-    sheets[idx[1]]
-  }
-
-  survey_sheet <- get_sheet_name("survey")
-  choices_sheet <- get_sheet_name("choices")
+  survey_sheet <- match_sheet_name(sheets, "survey")
+  choices_sheet <- match_sheet_name(sheets, "choices")
 
   if (is.null(survey_sheet)) {
     add_error("Missing required sheet 'survey'.")
@@ -59,7 +51,7 @@ test_form <- function(path, verbose = TRUE) {
   }
 
   survey <- tryCatch(
-    read_xlsx_sheet(path, survey_sheet),
+    read_xlsform_sheet(path, survey_sheet, skip_empty = FALSE),
     error = function(e) {
       add_error(sprintf("Failed to read survey sheet: %s", e$message))
       data.frame(stringsAsFactors = FALSE)
@@ -69,7 +61,7 @@ test_form <- function(path, verbose = TRUE) {
     data.frame(stringsAsFactors = FALSE)
   } else {
     tryCatch(
-      read_xlsx_sheet(path, choices_sheet),
+      read_xlsform_sheet(path, choices_sheet, skip_empty = FALSE),
       error = function(e) {
         add_error(sprintf("Failed to read choices sheet: %s", e$message))
         data.frame(stringsAsFactors = FALSE)
@@ -91,6 +83,10 @@ test_form <- function(path, verbose = TRUE) {
     return(list(errors = errors, warnings = warnings))
   }
 
+  # The header occupies spreadsheet row 1, and the sheets are read without
+  # dropping blank rows, so index i is spreadsheet row i + 1.
+  sheet_row <- function(i) i + 1L
+
   as_clean_chr <- function(x) {
     out <- as.character(x)
     out[is.na(out)] <- ""
@@ -107,11 +103,14 @@ test_form <- function(path, verbose = TRUE) {
   if (any(missing_name)) {
     add_error(sprintf(
       "Missing names in survey sheet rows: %s",
-      paste(which(missing_name), collapse = ", ")
+      paste(sheet_row(which(missing_name)), collapse = ", ")
     ))
   }
 
-  non_blank_name <- name_raw != ""
+  # An "end group" / "end repeat" row conventionally repeats the opener's name,
+  # which SurveyCTO's form designer does by default and pyxform ignores.
+  non_blank_name <- name_raw != "" &
+    !type_norm %in% c("end group", "end repeat")
   if (any(duplicated(name_raw[non_blank_name]))) {
     dups <- unique(name_raw[non_blank_name][duplicated(name_raw[non_blank_name])])
     add_error(sprintf(
@@ -125,7 +124,7 @@ test_form <- function(path, verbose = TRUE) {
   if (any(invalid_name)) {
     add_warning(sprintf(
       "Potentially invalid XLSForm names in survey rows: %s",
-      paste(which(invalid_name), collapse = ", ")
+      paste(sheet_row(which(invalid_name)), collapse = ", ")
     ))
   }
 
@@ -133,7 +132,7 @@ test_form <- function(path, verbose = TRUE) {
   if (any(malformed_select)) {
     add_error(sprintf(
       "Malformed select question types (missing list names) in survey rows: %s",
-      paste(which(malformed_select), collapse = ", ")
+      paste(sheet_row(which(malformed_select)), collapse = ", ")
     ))
   }
 
@@ -165,18 +164,31 @@ test_form <- function(path, verbose = TRUE) {
     "audio",
     "video",
     "file",
-    "barcode"
+    "barcode",
+    # SurveyCTO-specific types
+    "calculate_here",
+    "caseid",
+    "comments",
+    "enumerator",
+    "text audit",
+    "audio audit",
+    "speed violations count",
+    "speed violations list",
+    "speed violations audit"
   )
   known_structural <- c("begin group", "end group", "begin repeat", "end repeat")
   known_select_pattern <- "^select_(one|multiple)\\s+\\S+$"
+  # SurveyCTO sensor types carry the statistic or stream name in the type.
+  known_sensor_pattern <- "^sensor_(statistic|stream)\\s+\\S+$"
   unknown_type <- type_norm != "" &
     !type_norm %in% known_simple_types &
     !type_norm %in% known_structural &
-    !grepl(known_select_pattern, type_norm)
+    !grepl(known_select_pattern, type_norm) &
+    !grepl(known_sensor_pattern, type_norm)
   if (any(unknown_type)) {
     add_warning(sprintf(
       "Unknown or unsupported survey question types in rows: %s",
-      paste(which(unknown_type), collapse = ", ")
+      paste(sheet_row(which(unknown_type)), collapse = ", ")
     ))
   }
 
@@ -195,15 +207,25 @@ test_form <- function(path, verbose = TRUE) {
       "subscriberid",
       "simserial",
       "phonenumber",
-      "username"
+      "username",
+      # hidden SurveyCTO-specific types
+      "calculate_here",
+      "caseid",
+      "comments",
+      "text audit",
+      "audio audit",
+      "speed violations count",
+      "speed violations list",
+      "speed violations audit"
     )
     missing_label <- label == "" &
       type_norm != "" &
-      !type_norm %in% no_label_types
+      !type_norm %in% no_label_types &
+      !grepl(known_sensor_pattern, type_norm)
     if (any(missing_label)) {
       add_warning(sprintf(
         "Missing labels in survey sheet rows: %s",
-        paste(which(missing_label), collapse = ", ")
+        paste(sheet_row(which(missing_label)), collapse = ", ")
       ))
     }
   } else {
@@ -229,7 +251,7 @@ test_form <- function(path, verbose = TRUE) {
         add_error(sprintf(
           "Unmatched '%s' at survey row %s.",
           t,
-          i
+          sheet_row(i)
         ))
         next
       }
@@ -240,9 +262,9 @@ test_form <- function(path, verbose = TRUE) {
         add_error(sprintf(
           "Mismatched '%s' at survey row %s; expected '%s' for opener at row %s.",
           t,
-          i,
+          sheet_row(i),
           expected,
-          top$row
+          sheet_row(top$row)
         ))
         next
       }
@@ -255,7 +277,7 @@ test_form <- function(path, verbose = TRUE) {
       add_error(sprintf(
         "Unclosed '%s' opened at survey row %s.",
         stack$type[j],
-        stack$row[j]
+        sheet_row(stack$row[j])
       ))
     }
   }
@@ -277,7 +299,7 @@ test_form <- function(path, verbose = TRUE) {
       if (length(unknown_refs) > 0) {
         add_error(sprintf(
           "Unknown ${} reference(s) in survey row %s column '%s': %s",
-          i,
+          sheet_row(i),
           col,
           paste(unknown_refs, collapse = ", ")
         ))
@@ -319,21 +341,27 @@ test_form <- function(path, verbose = TRUE) {
       } else {
         list_name <- as_clean_chr(choices$list_name)
         value <- as_clean_chr(choices[[value_col]])
+        # Completely empty rows are spacers between lists, not missing values.
+        has_content <- Reduce(
+          `|`,
+          lapply(choices, function(col) as_clean_chr(col) != ""),
+          rep(FALSE, nrow(choices))
+        )
 
-        missing_list_name <- which(list_name == "")
+        missing_list_name <- which(list_name == "" & has_content)
         if (length(missing_list_name) > 0) {
           add_warning(sprintf(
             "Blank list_name values found in choices rows: %s",
-            paste(missing_list_name, collapse = ", ")
+            paste(sheet_row(missing_list_name), collapse = ", ")
           ))
         }
 
-        missing_value <- which(value == "")
+        missing_value <- which(value == "" & has_content)
         if (length(missing_value) > 0) {
           add_warning(sprintf(
             "Blank %s values found in choices rows: %s",
             value_col,
-            paste(missing_value, collapse = ", ")
+            paste(sheet_row(missing_value), collapse = ", ")
           ))
         }
 
@@ -343,7 +371,7 @@ test_form <- function(path, verbose = TRUE) {
           add_error(sprintf(
             "Duplicate list_name/%s pairs found in choices rows: %s",
             value_col,
-            paste(which(dup_key), collapse = ", ")
+            paste(sheet_row(which(dup_key)), collapse = ", ")
           ))
         }
 
@@ -374,9 +402,17 @@ test_form <- function(path, verbose = TRUE) {
 #' @keywords internal
 #' @noRd
 normalize_xlsform_type <- function(x) {
-  x <- tolower(trimws(as.character(x)))
+  x <- trimws(as.character(x))
   x[is.na(x)] <- ""
-  gsub("\\s+", " ", x)
+  x <- gsub("\\s+", " ", x)
+  # The list name in "select_one <list>" is case-sensitive in XLSForm, so
+  # lowercase the type keyword only and leave the list name as written.
+  is_select <- grepl("^select_(one|multiple)\\s", x, ignore.case = TRUE)
+  x[!is_select] <- tolower(x[!is_select])
+  x[is_select] <- sub("^(\\S+)", "\\L\\1", x[is_select], perl = TRUE)
+  # XLSForm accepts "begin group" and "begin_group" interchangeably.
+  x <- sub("^(begin|end)_(group|repeat)$", "\\1 \\2", x)
+  x
 }
 
 #' @keywords internal

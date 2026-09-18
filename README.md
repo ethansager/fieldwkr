@@ -41,4 +41,8 @@ data_check$errors
 - This package mirrors the Stata workflows at a practical level but does not
   implement every validation rule in the original commands.
 - Public API uses canonical `fieldwkr` function names (`cb_*`, `correct_*`,
-  `comp_dup`, `duplicates`, `test_form`, `test_data`, `dummy_dat`).
+  `comp_dup`, `duplicates`, `read_comments`, `test_form`, `test_data`,
+  `dummy_dat`).
+- In `duplicates()`, `idvar` is the project identifier being adjudicated (for
+  example a household ID from the sample frame) and `uniquevars` identifies a
+  single submission, which in SurveyCTO data is normally `KEY`.
